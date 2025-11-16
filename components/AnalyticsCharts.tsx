@@ -1,10 +1,13 @@
 
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { templates } from '../data';
-import { TemplateCategory } from '../types';
+import { Template, TemplateCategory } from '../types';
 
-const DownloadsByCategoryChart: React.FC = () => {
+interface DownloadsByCategoryChartProps {
+    templates: Template[];
+}
+
+const DownloadsByCategoryChart: React.FC<DownloadsByCategoryChartProps> = ({ templates }) => {
     const dataMap = new Map<TemplateCategory, number>();
     templates.forEach(t => {
         const count = dataMap.get(t.category) || 0;

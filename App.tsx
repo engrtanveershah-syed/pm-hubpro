@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, NavLink, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { templates, categories, subscriptionPlans } from './data';
-// FIX: Import SubscriptionTier type to resolve typing error in PricingPage component.
+import { templates as initialTemplates, categories, subscriptionPlans } from './data';
 import { Template, TemplateCategory, SubscriptionPlan, TemplateType, SubscriptionTier } from './types';
 import TemplateCard from './components/TemplateCard';
 import AnalyticsCharts from './components/AnalyticsCharts';
-import { FileIcon, Star, Search, UserCircle, Download, Eye, CheckCircle, X } from './components/Icons';
+import TemplateUploadForm from './components/TemplateUploadForm';
+import AiTemplateGenerator from './components/AiTemplateGenerator';
+import { FileIcon, Star, Search, UserCircle, Download, Eye, CheckCircle, X, Sparkles } from './components/Icons';
 
 // Helper Components
 const PremiumBadge: React.FC = () => (
@@ -93,9 +94,9 @@ const TemplatePreviewModal: React.FC<{ template: Template | null; onClose: () =>
 };
 
 
-// Page Components (defined outside main App for performance)
+// Page Components
 
-const HomePage: React.FC<{ onPreview: (template: Template) => void }> = ({ onPreview }) => {
+const HomePage: React.FC<{ templates: Template[], onPreview: (template: Template) => void }> = ({ templates, onPreview }) => {
     const featuredTemplates = templates.filter(t => t.isPremium).slice(0, 3);
     return (
         <div className="space-y-16 md:space-y-24">
@@ -130,7 +131,7 @@ const HomePage: React.FC<{ onPreview: (template: Template) => void }> = ({ onPre
     );
 };
 
-const TemplatesPage: React.FC<{ onPreview: (template: Template) => void }> = ({ onPreview }) => {
+const TemplatesPage: React.FC<{ templates: Template[], onPreview: (template: Template) => void }> = ({ templates, onPreview }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'All'>('All');
     const [filteredTemplates, setFilteredTemplates] = useState(templates);
@@ -144,7 +145,7 @@ const TemplatesPage: React.FC<{ onPreview: (template: Template) => void }> = ({ 
             result = result.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
         }
         setFilteredTemplates(result);
-    }, [searchTerm, selectedCategory]);
+    }, [searchTerm, selectedCategory, templates]);
     
     return (
         <div className="container mx-auto px-4 py-8">
@@ -179,6 +180,12 @@ const TemplatesPage: React.FC<{ onPreview: (template: Template) => void }> = ({ 
                         {filteredTemplates.map(template => (
                            <TemplateCard key={template.id} template={template} onPreview={onPreview} />
                         ))}
+                         {filteredTemplates.length === 0 && (
+                            <div className="sm:col-span-2 lg:col-span-3 text-center py-12 text-slate-500">
+                                <h3 className="text-xl font-semibold">No Templates Found</h3>
+                                <p>Try adjusting your search or category filters.</p>
+                            </div>
+                        )}
                     </div>
                 </main>
             </div>
@@ -248,13 +255,27 @@ const DashboardPage: React.FC = () => {
     );
 };
 
-const AdminPage: React.FC = () => {
+const AdminPage: React.FC<{
+    templates: Template[],
+    onAddTemplate: (newTemplate: Template) => void,
+    onAddTemplates: (newTemplates: Template[]) => void
+}> = ({ templates, onAddTemplate, onAddTemplates }) => {
     return (
         <div className="container mx-auto px-4 py-8">
             <h1 className="text-3xl font-bold text-slate-800 mb-6">Admin Dashboard</h1>
-             <div className="bg-white p-6 rounded-lg shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                    <h2 className="text-xl font-semibold mb-4">Upload Template Manually</h2>
+                    <TemplateUploadForm onTemplateAdd={onAddTemplate} />
+                </div>
+                <div className="bg-white p-6 rounded-lg shadow-sm">
+                    <h2 className="text-xl font-semibold mb-4">Generate Templates with AI</h2>
+                    <AiTemplateGenerator onTemplatesAdded={onAddTemplates} />
+                </div>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm">
                 <h2 className="text-xl font-semibold mb-4">Analytics</h2>
-                <AnalyticsCharts />
+                <AnalyticsCharts templates={templates} />
             </div>
         </div>
     );
@@ -262,7 +283,6 @@ const AdminPage: React.FC = () => {
 
 // Layout Components
 
-// FIX: Refactored Header component to use useAuth hook directly for login, removing the need for HeaderWrapper hack.
 const Header: React.FC = () => {
     const { isAuthenticated, user, logout, login } = useAuth();
     return (
@@ -299,7 +319,6 @@ const Header: React.FC = () => {
         </header>
     );
 };
-// FIX: Removed HeaderWrapper and related global type declaration as it was an unnecessary hack.
 
 
 const Footer: React.FC = () => {
@@ -315,6 +334,7 @@ const Footer: React.FC = () => {
 // Main App Component
 function App() {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [allTemplates, setAllTemplates] = useState<Template[]>(initialTemplates);
 
   const handlePreview = (template: Template) => {
     setSelectedTemplate(template);
@@ -324,19 +344,26 @@ function App() {
     setSelectedTemplate(null);
   };
 
+  const handleAddTemplate = (newTemplate: Template) => {
+    setAllTemplates(prevTemplates => [newTemplate, ...prevTemplates]);
+  };
+
+  const handleAddTemplates = (newTemplates: Template[]) => {
+    setAllTemplates(prevTemplates => [...newTemplates, ...prevTemplates]);
+  };
+
   return (
     <AuthProvider>
         <HashRouter>
             <div className="flex flex-col min-h-screen">
-                {/* FIX: Replaced HeaderWrapper with Header component directly. */}
                 <Header/>
                 <main className="flex-grow">
                     <Routes>
-                        <Route path="/" element={<HomePage onPreview={handlePreview} />} />
-                        <Route path="/templates" element={<TemplatesPage onPreview={handlePreview} />} />
+                        <Route path="/" element={<HomePage templates={allTemplates} onPreview={handlePreview} />} />
+                        <Route path="/templates" element={<TemplatesPage templates={allTemplates} onPreview={handlePreview} />} />
                         <Route path="/pricing" element={<PricingPage />} />
                         <Route path="/dashboard" element={<DashboardPage />} />
-                        <Route path="/admin" element={<AdminPage />} />
+                        <Route path="/admin" element={<AdminPage templates={allTemplates} onAddTemplate={handleAddTemplate} onAddTemplates={handleAddTemplates} />} />
                     </Routes>
                 </main>
                 <Footer />
