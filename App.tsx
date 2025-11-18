@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Link, NavLink, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { templates as initialTemplates, categories, subscriptionPlans } from './data';
 import { Template, TemplateCategory, SubscriptionPlan, TemplateType, SubscriptionTier } from './types';
@@ -8,7 +7,8 @@ import TemplateCard from './components/TemplateCard';
 import AnalyticsCharts from './components/AnalyticsCharts';
 import TemplateUploadForm from './components/TemplateUploadForm';
 import AiTemplateGenerator from './components/AiTemplateGenerator';
-import { FileIcon, Star, Search, UserCircle, Download, Eye, CheckCircle, X, Sparkles } from './components/Icons';
+import AdminPayPalSettings from './components/AdminPayPalSettings';
+import { FileIcon, Star, Search, UserCircle, Download, Eye, CheckCircle, X, PayPal, Visa, MasterCard } from './components/Icons';
 
 // Helper Components
 const PremiumBadge: React.FC = () => (
@@ -18,7 +18,7 @@ const PremiumBadge: React.FC = () => (
     </span>
 );
 
-const PricingCard: React.FC<{ plan: SubscriptionPlan, onSubscribe: (tier: SubscriptionPlan['tier']) => void }> = ({ plan, onSubscribe }) => {
+const PricingCard: React.FC<{ plan: SubscriptionPlan, onSubscribe: (plan: SubscriptionPlan) => void }> = ({ plan, onSubscribe }) => {
     const isPro = plan.tier !== 'FREE';
     return (
         <div className={`border rounded-lg p-6 flex flex-col ${isPro ? 'border-primary-500 bg-primary-50' : 'bg-white'}`}>
@@ -35,11 +35,22 @@ const PricingCard: React.FC<{ plan: SubscriptionPlan, onSubscribe: (tier: Subscr
                     </li>
                 ))}
             </ul>
+            {isPro && (
+                <div className="mt-6">
+                    <p className="text-xs text-center text-slate-500 mb-2">Secure payments with</p>
+                    <div className="flex justify-center items-center gap-2">
+                        <PayPal className="h-5 w-auto"/>
+                        <Visa className="h-5 w-auto" />
+                        <MasterCard className="h-5 w-auto" />
+                    </div>
+                </div>
+            )}
             <button
-                onClick={() => onSubscribe(plan.tier)}
-                className={`mt-8 w-full py-3 px-6 rounded-lg font-semibold text-center transition-colors ${isPro ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'}`}
+                onClick={() => onSubscribe(plan)}
+                disabled={!isPro}
+                className={`mt-8 w-full py-3 px-6 rounded-lg font-semibold text-center transition-colors ${isPro ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-slate-200 text-slate-800 cursor-not-allowed'}`}
             >
-                {isPro ? 'Get Started' : 'Current Plan'}
+                {isPro ? 'Choose Plan' : 'Current Plan'}
             </button>
         </div>
     );
@@ -93,20 +104,133 @@ const TemplatePreviewModal: React.FC<{ template: Template | null; onClose: () =>
     );
 };
 
+const PayPalCheckoutModal: React.FC<{
+    plan: SubscriptionPlan | null;
+    onClose: () => void;
+    onSuccess: (tier: SubscriptionTier) => void;
+}> = ({ plan, onClose, onSuccess }) => {
+    const [isProcessing, setIsProcessing] = useState(false);
+    const navigate = useNavigate();
+    
+    if (!plan) return null;
+
+    const handlePayment = () => {
+        setIsProcessing(true);
+        // Simulate API call to PayPal
+        setTimeout(() => {
+            onSuccess(plan.tier);
+            setIsProcessing(false);
+            onClose();
+            navigate('/payment-status?status=success');
+        }, 2000);
+    };
+    
+    const handleCancel = () => {
+        onClose();
+        navigate('/payment-status?status=cancelled');
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+            <div className="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="p-8">
+                    <div className="text-center mb-6">
+                         <h2 className="text-2xl font-bold text-slate-800">Complete Your Subscription</h2>
+                         <p className="text-slate-500 mt-1">You are subscribing to the <span className="font-semibold text-primary-600">{plan.name}</span> plan.</p>
+                    </div>
+                   
+                    <div className="bg-slate-100 p-4 rounded-lg mb-6 text-center">
+                        <p className="text-slate-600">Total Due Today</p>
+                        <p className="text-3xl font-bold text-slate-900">{plan.price}<span className="text-base font-normal">{plan.period}</span></p>
+                    </div>
+
+                    <button
+                        onClick={handlePayment}
+                        disabled={isProcessing}
+                        className="w-full bg-[#0070ba] text-white font-bold py-3 px-6 rounded-lg hover:bg-[#005ea6] transition-colors flex items-center justify-center gap-2 disabled:bg-slate-400"
+                    >
+                        {isProcessing ? (
+                            <>
+                                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                Processing...
+                            </>
+                        ) : (
+                           <PayPal className="w-20" />
+                        )}
+                    </button>
+                    
+                    <div className="mt-4 text-center">
+                        <p className="text-xs text-slate-500 mb-2">Cards accepted via PayPal:</p>
+                        <div className="flex justify-center items-center gap-2">
+                            <Visa className="h-8 w-auto" />
+                            <MasterCard className="h-8 w-auto" />
+                        </div>
+                    </div>
+
+                    <button onClick={handleCancel} className="w-full text-center mt-4 text-sm text-slate-500 hover:underline">
+                        Cancel Payment
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // Page Components
 
 const HomePage: React.FC<{ templates: Template[], onPreview: (template: Template) => void }> = ({ templates, onPreview }) => {
     const featuredTemplates = templates.filter(t => t.isPremium).slice(0, 3);
+    const navigate = useNavigate();
+    const [heroSearch, setHeroSearch] = useState('');
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (heroSearch.trim()) {
+            navigate(`/templates?search=${encodeURIComponent(heroSearch)}`);
+        } else {
+             navigate('/templates');
+        }
+    };
+
     return (
         <div className="space-y-16 md:space-y-24">
-            <section className="text-center py-16 md:py-24 bg-white">
-                <div className="container mx-auto px-4">
-                    <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900">Empower Your Projects</h1>
+            <section className="text-center py-16 md:py-24 bg-slate-50 relative overflow-hidden">
+                 {/* Decorative background blobs */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] bg-white rounded-full opacity-50 blur-3xl -z-10"></div>
+
+                <div className="container mx-auto px-4 relative z-10">
+                    <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight">Empower Your Projects</h1>
                     <p className="mt-4 max-w-2xl mx-auto text-lg text-slate-600">Access a vast library of professionally-crafted templates to streamline your project management workflow.</p>
-                    <Link to="/templates" className="mt-8 inline-block bg-primary-600 text-white font-bold py-3 px-8 rounded-lg text-lg hover:bg-primary-700 transition-transform hover:scale-105">
-                        Browse Templates
-                    </Link>
+                    
+                    {/* Prominent Search Bar */}
+                    <div className="mt-10 max-w-2xl mx-auto">
+                        <form onSubmit={handleSearch} className="relative">
+                            <div className="relative flex items-center group transition-all duration-300 transform hover:-translate-y-0.5">
+                                <Search className="absolute left-5 w-6 h-6 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+                                <input 
+                                    type="text"
+                                    value={heroSearch}
+                                    onChange={(e) => setHeroSearch(e.target.value)}
+                                    placeholder="Search for templates (e.g. Agile, Risk Register, Budget)..." 
+                                    className="w-full pl-14 pr-36 py-5 rounded-full border-2 border-slate-200 shadow-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 outline-none text-lg transition-all placeholder:text-slate-400"
+                                />
+                                <button 
+                                    type="submit"
+                                    className="absolute right-2 top-2 bottom-2 bg-primary-600 text-white px-8 rounded-full font-bold hover:bg-primary-700 transition-colors shadow-md flex items-center gap-2"
+                                >
+                                    Search
+                                </button>
+                            </div>
+                        </form>
+                         <div className="mt-5 flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm text-slate-500">
+                            <span className="font-medium">Trending Searches:</span>
+                            <Link to="/templates?search=Agile" className="hover:text-primary-600 hover:underline decoration-2 decoration-primary-200 underline-offset-4 transition-all">Agile</Link>
+                            <Link to="/templates?search=Gantt" className="hover:text-primary-600 hover:underline decoration-2 decoration-primary-200 underline-offset-4 transition-all">Gantt Charts</Link>
+                            <Link to="/templates?search=Risk" className="hover:text-primary-600 hover:underline decoration-2 decoration-primary-200 underline-offset-4 transition-all">Risk Log</Link>
+                            <Link to="/templates?search=Report" className="hover:text-primary-600 hover:underline decoration-2 decoration-primary-200 underline-offset-4 transition-all">Status Reports</Link>
+                        </div>
+                    </div>
                 </div>
             </section>
             <section className="container mx-auto px-4">
@@ -132,9 +256,38 @@ const HomePage: React.FC<{ templates: Template[], onPreview: (template: Template
 };
 
 const TemplatesPage: React.FC<{ templates: Template[], onPreview: (template: Template) => void }> = ({ templates, onPreview }) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'All'>('All');
+    const [searchParams] = useSearchParams();
+    
+    // Initialize state from URL parameters
+    const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+    
+    // Check if category param is valid, otherwise default to 'All'
+    const paramCategory = searchParams.get('category');
+    const initialCategory = (paramCategory && categories.includes(paramCategory as any)) 
+        ? (paramCategory as TemplateCategory) 
+        : 'All';
+        
+    const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'All'>(initialCategory);
     const [filteredTemplates, setFilteredTemplates] = useState(templates);
+    
+    // Sync state with URL parameters when they change
+    useEffect(() => {
+        const search = searchParams.get('search');
+        const category = searchParams.get('category');
+        
+        if (search !== null) {
+            setSearchTerm(search);
+        } else if (!category) {
+            // If search param is missing and no category, likely navigated to root /templates
+            setSearchTerm('');
+        }
+
+        if (category && categories.includes(category as any)) {
+            setSelectedCategory(category as TemplateCategory);
+        } else if (!category) {
+            setSelectedCategory('All');
+        }
+    }, [searchParams]);
     
     useEffect(() => {
         let result = templates;
@@ -195,28 +348,35 @@ const TemplatesPage: React.FC<{ templates: Template[], onPreview: (template: Tem
 
 const PricingPage: React.FC = () => {
     const { subscribe } = useAuth();
-    const navigate = useNavigate();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
 
-    const handleSubscribe = (tier: SubscriptionTier) => {
-        if (tier !== 'FREE') {
-            subscribe(tier);
-            alert(`Successfully subscribed to ${tier} plan!`);
-            navigate('/dashboard');
+    const handleSelectPlan = (plan: SubscriptionPlan) => {
+        if (plan.tier !== 'FREE') {
+            setSelectedPlan(plan);
+            setIsModalOpen(true);
         }
     };
 
     return (
-        <div className="container mx-auto px-4 py-16">
-            <div className="text-center max-w-2xl mx-auto">
-                <h1 className="text-4xl font-extrabold text-slate-900">Choose Your Plan</h1>
-                <p className="mt-4 text-lg text-slate-600">Unlock your full potential with a Pro plan. Get unlimited access to all templates and features.</p>
+        <>
+            <div className="container mx-auto px-4 py-16">
+                <div className="text-center max-w-2xl mx-auto">
+                    <h1 className="text-4xl font-extrabold text-slate-900">Choose Your Plan</h1>
+                    <p className="mt-4 text-lg text-slate-600">Unlock your full potential with a Pro plan. Get unlimited access to all templates and features.</p>
+                </div>
+                <div className="mt-12 grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                    {subscriptionPlans.map(plan => (
+                        <PricingCard key={plan.tier} plan={plan} onSubscribe={handleSelectPlan} />
+                    ))}
+                </div>
             </div>
-            <div className="mt-12 grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                {subscriptionPlans.map(plan => (
-                    <PricingCard key={plan.tier} plan={plan} onSubscribe={handleSubscribe} />
-                ))}
-            </div>
-        </div>
+            <PayPalCheckoutModal 
+                plan={selectedPlan} 
+                onClose={() => setIsModalOpen(false)}
+                onSuccess={subscribe}
+            />
+        </>
     );
 };
 
@@ -273,13 +433,46 @@ const AdminPage: React.FC<{
                     <AiTemplateGenerator onTemplatesAdded={onAddTemplates} />
                 </div>
             </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm mb-8">
+                <AdminPayPalSettings />
+            </div>
             <div className="bg-white p-6 rounded-lg shadow-sm">
                 <h2 className="text-xl font-semibold mb-4">Analytics</h2>
                 <AnalyticsCharts templates={templates} />
             </div>
         </div>
     );
-}
+};
+
+const PaymentStatusPage: React.FC = () => {
+    const [searchParams] = useSearchParams();
+    const status = searchParams.get('status');
+
+    if (status === 'success') {
+        return (
+            <div className="container mx-auto px-4 py-16 text-center">
+                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                <h1 className="text-3xl font-bold text-slate-800">Payment Successful!</h1>
+                <p className="text-slate-600 mt-2">Your subscription is now active. Welcome to PMHub Pro!</p>
+                <Link to="/dashboard" className="mt-8 inline-block bg-primary-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-primary-700">
+                    Go to Dashboard
+                </Link>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="container mx-auto px-4 py-16 text-center">
+            <X className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h1 className="text-3xl font-bold text-slate-800">Payment Cancelled</h1>
+            <p className="text-slate-600 mt-2">Your transaction was not completed. You have not been charged.</p>
+            <Link to="/pricing" className="mt-8 inline-block bg-slate-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-slate-700">
+                View Pricing Plans
+            </Link>
+        </div>
+    );
+};
+
 
 // Layout Components
 
@@ -364,6 +557,7 @@ function App() {
                         <Route path="/pricing" element={<PricingPage />} />
                         <Route path="/dashboard" element={<DashboardPage />} />
                         <Route path="/admin" element={<AdminPage templates={allTemplates} onAddTemplate={handleAddTemplate} onAddTemplates={handleAddTemplates} />} />
+                        <Route path="/payment-status" element={<PaymentStatusPage />} />
                     </Routes>
                 </main>
                 <Footer />
